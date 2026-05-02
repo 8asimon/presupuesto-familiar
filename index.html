@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Presupuesto Familiar</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --bg2: #1a1d27;
+    --bg3: #222536;
+    --border: #2e3148;
+    --text: #e8eaf0;
+    --text2: #9ca3af;
+    --text3: #6b7280;
+    --blue: #4f7cf7;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --purple: #a78bfa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 18px; font-weight: 600; background: linear-gradient(135deg, #4f7cf7, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .header-right { font-size: 12px; color: var(--text3); }
+
+  .tabs { display: flex; background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 24px; }
+  .tab { padding: 14px 20px; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; transition: all .2s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  .content { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .metric { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; }
+  .metric-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+  .metric-value { font-size: 22px; font-weight: 600; }
+  .metric-sub { font-size: 11px; color: var(--text3); margin-top: 4px; }
+  .green { color: var(--green); }
+  .red { color: var(--red); }
+  .blue { color: var(--blue); }
+  .yellow { color: var(--yellow); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 900px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .card-title { font-size: 12px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 16px; }
+
+  .progress-item { margin-bottom: 10px; }
+  .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .progress-name { font-size: 13px; color: var(--text); }
+  .progress-vals { font-size: 11px; color: var(--text3); }
+  .progress-bar { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
+  .badge-ok { background: rgba(52,211,153,.15); color: var(--green); }
+  .badge-warn { background: rgba(251,191,36,.15); color: var(--yellow); }
+  .badge-danger { background: rgba(248,113,113,.15); color: var(--red); }
+
+  .cat-header { display: flex; align-items: center; gap-8; padding: 8px 0 4px; border-bottom: 1px solid var(--border); margin-bottom: 6px; margin-top: 12px; }
+  .cat-name { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; }
+
+  .tx-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .tx-row:last-child { border-bottom: none; }
+  .tx-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .tx-info { flex: 1; min-width: 0; }
+  .tx-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tx-meta { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .tx-amount { font-size: 13px; font-weight: 600; color: var(--red); flex-shrink: 0; }
+
+  .flujo-table { width: 100%; border-collapse: collapse; font-size: 12px; overflow-x: auto; display: block; }
+  .flujo-table th { text-align: right; font-size: 11px; font-weight: 500; color: var(--text3); padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .flujo-table th:first-child { text-align: left; }
+  .flujo-table td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .flujo-table td:first-child { text-align: left; font-weight: 500; color: var(--text2); }
+  .flujo-table tr.gastos td { color: var(--red); }
+  .flujo-table tr.ingreso td { color: var(--green); }
+  .flujo-table tr.resultado td { font-weight: 600; }
+  .flujo-table tr.acumulado { background: rgba(79,124,247,.05); }
+  .flujo-table tr.acumulado td { color: var(--blue); font-weight: 600; }
+
+  .loading { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--text3); font-size: 14px; }
+  .spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; margin-right: 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .alert-banner { background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: var(--red); }
+  .chart-wrap { position: relative; height: 220px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>💰 Presupuesto Familiar</h1>
+  <div class="header-right" id="last-update">Cargando...</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="setTab('simon')">Simón</div>
+  <div class="tab" onclick="setTab('alejandra')">Alejandra</div>
+  <div class="tab" onclick="setTab('hogar')">Hogar</div>
+</div>
+
+<div class="content" id="content">
+  <div class="loading"><div class="spinner"></div>Cargando datos...</div>
+</div>
+
+<script>
+const SHEET_ID = '1-2q9EyhkTXmYILgS5mnQSpAsjWN4TwOnmVvr9CRYgts';
+const API = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=`;
+
+let currentTab = 'simon';
+let allData = {};
+let charts = {};
+
+const CAT_ICONS = {
+  'Hogar':'🏠','Comida':'🍔','Transporte':'🚗','Deudas':'💳',
+  'Entretenimiento':'🎉','Tranquilidad Financiera':'💰','Salud':'💊','Por Definir':'❓'
+};
+
+function fmt(n) { return '$' + Math.round(n||0).toLocaleString('es-CO'); }
+function fmtS(n) { const a=Math.abs(n||0); return (n<0?'-':'')+'$'+(a>=1000000?(a/1000000).toFixed(1)+'M':a>=1000?Math.round(a/1000)+'k':Math.round(a)); }
+function pct(g,p) { return p>0?Math.round(g/p*100):0; }
+function barColor(p) { return p>=100?'var(--red)':p>=90?'var(--yellow)':'var(--blue)'; }
+
+async function fetchSheet(name) {
+  const url = API + encodeURIComponent(name);
+  const res  = await fetch(url);
+  const text = await res.text();
+  const json = JSON.parse(text.replace(/^[^{]+/, '').replace(/[^}]+$/, ''));
+  const cols = json.table.cols.map(c => c.label);
+  const rows = json.table.rows.map(r => {
+    const obj = {};
+    r.c.forEach((cell, i) => { obj[cols[i]] = cell ? cell.v : null; });
+    return obj;
+  });
+  return rows;
+}
+
+async function loadAll() {
+  try {
+    const [sp, ap, hp, sf, af, hf, tx] = await Promise.all([
+      fetchSheet('LS_Simon_Progreso'),
+      fetchSheet('LS_Alejandra_Progreso'),
+      fetchSheet('LS_Hogar_Progreso'),
+      fetchSheet('LS_Simon_Flujo'),
+      fetchSheet('LS_Alejandra_Flujo'),
+      fetchSheet('LS_Hogar_Flujo'),
+      fetchSheet('Transacciones'),
+    ]);
+    allData = { simon: { progreso: sp, flujo: sf }, alejandra: { progreso: ap, flujo: af }, hogar: { progreso: hp, flujo: hf }, tx };
+    document.getElementById('last-update').textContent = 'Actualizado: ' + new Date().toLocaleTimeString('es-CO');
+    renderTab(currentTab);
+  } catch(e) {
+    document.getElementById('content').innerHTML = `<div class="loading">Error cargando datos. Verifica que el Sheet es público.</div>`;
+  }
+}
+
+function setTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['simon','alejandra','hogar'][i]===tab));
+  renderTab(tab);
+}
+
+function renderTab(tab) {
+  const d = allData[tab];
+  if (!d) return;
+  const progreso = d.progreso || [];
+  const flujo    = d.flujo || [];
+  const tx       = (allData.tx || []).filter(r => {
+    if (tab === 'hogar') return (r['Bucket']||'').toLowerCase() === 'ambos';
+    return (r['Persona']||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'') === tab;
+  }).slice(0,10);
+
+  const totalPres = progreso.reduce((s,r)=>s+(r['Presupuesto']||0),0);
+  const totalGast = progreso.reduce((s,r)=>s+(r['Gastado']||0),0);
+  const totalDisp = totalPres - totalGast;
+  const ingreso   = flujo.length ? (flujo[0]['Ingreso']||0) : 0;
+  const pctEjec   = pct(totalGast, totalPres);
+  const alertas   = progreso.filter(r=>r['Estado']==='EXCEDIDO'||r['Estado']==='ALERTA');
+
+  let html = '';
+
+  // Alertas
+  if (alertas.length) {
+    const exc = alertas.filter(r=>r['Estado']==='EXCEDIDO');
+    const warn = alertas.filter(r=>r['Estado']==='ALERTA');
+    if (exc.length) html += `<div class="alert-banner">⚠️ <b>Excedido:</b> ${exc.map(r=>r['Subcategoria']).join(', ')}</div>`;
+    if (warn.length) html += `<div class="alert-banner" style="background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.3);color:var(--yellow)">🟡 <b>En alerta (≥90%):</b> ${warn.map(r=>r['Subcategoria']).join(', ')}</div>`;
+  }
+
+  // Métricas
+  html += `<div class="metrics">`;
+  if (ingreso) html += `<div class="metric"><div class="metric-label">Ingreso</div><div class="metric-value green">${fmt(ingreso)}</div></div>`;
+  html += `<div class="metric"><div class="metric-label">Presupuesto</div><div class="metric-value">${fmt(totalPres)}</div></div>`;
+  html += `<div class="metric"><div class="metric-label">Gastado</div><div class="metric-value ${pctEjec>=100?'red':pctEjec>=90?'yellow':'blue'}">${fmt(totalGast)}</div><div class="metric-sub">${pctEjec}% ejecutado</div></div>`;
+  html += `<div class="metric"><div class="metric-label">Disponible</div><div class="metric-value ${totalDisp<0?'red':'green'}">${fmt(totalDisp)}</div></div>`;
+  if (ingreso) html += `<div class="metric"><div class="metric-label">Libre (ingreso-gastado)</div><div class="metric-value ${ingreso-totalGast<0?'red':'green'}">${fmt(ingreso-totalGast)}</div></div>`;
+  html += `</div>`;
+
+  // Grid: progreso + gráfica
+  html += `<div class="grid2">`;
+
+  // Tabla progreso por categoría
+  html += `<div class="card"><div class="card-title">Progreso del mes</div>`;
+  const cats = [...new Set(progreso.map(r=>r['Categoria']))];
+  cats.forEach(cat => {
+    const items = progreso.filter(r=>r['Categoria']===cat);
+    const catP  = items.reduce((s,r)=>s+(r['Presupuesto']||0),0);
+    const catG  = items.reduce((s,r)=>s+(r['Gastado']||0),0);
+    const p2    = pct(catG,catP);
+    html += `<div class="cat-header"><span class="cat-name">${CAT_ICONS[cat]||'•'} ${cat}</span><span style="margin-left:auto;font-size:11px;color:var(--text3)">${fmt(catG)} / ${fmt(catP)}</span></div>`;
+    items.forEach(r => {
+      const g  = r['Gastado']||0;
+      const p3 = pct(g, r['Presupuesto']||0);
+      const badge = p3>=100?'badge-danger':p3>=90?'badge-warn':'badge-ok';
+      const label = p3>=100?'Excedido':p3>=90?'Alerta':'OK';
+      html += `<div class="progress-item">
+        <div class="progress-header">
+          <span class="progress-name">${r['Subcategoria']}</span>
+          <span style="display:flex;align-items:center;gap:6px">
+            <span class="progress-vals">${fmt(g)} / ${fmt(r['Presupuesto']||0)}</span>
+            <span class="badge ${badge}">${label}</span>
+          </span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(p3,100)}%;background:${barColor(p3)}"></div></div>
+      </div>`;
+    });
+  });
+  html += `</div>`;
+
+  // Gráfica de barras
+  html += `<div class="card"><div class="card-title">Presupuesto vs. gastado</div><div class="chart-wrap"><canvas id="bar-chart"></canvas></div></div>`;
+  html += `</div>`;
+
+  // Flujo de caja
+  html += `<div class="card" style="margin-bottom:16px"><div class="card-title">Flujo de caja mensual</div><div style="overflow-x:auto"><table class="flujo-table">`;
+  const meses = flujo.map(r=>String(r['Mes']||'').substring(0,7));
+  html += `<tr><th>Concepto</th>${meses.map(m=>`<th>${m}</th>`).join('')}</tr>`;
+  html += `<tr class="gastos"><td>Gastos</td>${flujo.map(r=>`<td>${fmt(r['Gastos']||0)}</td>`).join('')}</tr>`;
+  if (ingreso) {
+    html += `<tr class="ingreso"><td>Ingreso</td>${flujo.map(r=>`<td>${fmt(r['Ingreso']||0)}</td>`).join('')}</tr>`;
+    html += `<tr class="resultado"><td>Resultado</td>${flujo.map(r=>{const v=r['Resultado']||0;return`<td style="color:${v>=0?'var(--green)':'var(--red)'}">${fmt(v)}</td>`;}).join('')}</tr>`;
+    html += `<tr class="acumulado"><td>Acumulado</td>${flujo.map(r=>{const v=r['Acumulado']||0;return`<td style="color:${v>=0?'var(--blue)':'var(--red)'}">${fmt(v)}</td>`;}).join('')}</tr>`;
+  }
+  html += `</table></div></div>`;
+
+  // Gráfica de líneas flujo
+  html += `<div class="grid2">`;
+  html += `<div class="card"><div class="card-title">Tendencia de gastos</div><div class="chart-wrap"><canvas id="line-chart"></canvas></div></div>`;
+
+  // Transacciones recientes
+  html += `<div class="card"><div class="card-title">Transacciones recientes</div>`;
+  if (tx.length) {
+    tx.forEach(r => {
+      const cat = r['Categoría']||'';
+      const icon = CAT_ICONS[cat]||'💳';
+      const bg = cat==='Entretenimiento'?'rgba(167,139,250,.15)':cat==='Hogar'?'rgba(79,124,247,.15)':cat==='Transporte'?'rgba(251,191,36,.15)':'rgba(52,211,153,.15)';
+      html += `<div class="tx-row">
+        <div class="tx-icon" style="background:${bg}">${icon}</div>
+        <div class="tx-info">
+          <div class="tx-name">${r['Comercio']||'—'}</div>
+          <div class="tx-meta">${(r['Fecha']||'').toString().substring(0,10)} · ${r['Subcategoría']||''}</div>
+        </div>
+        <div class="tx-amount">${fmt(r['Monto']||0)}</div>
+      </div>`;
+    });
+  } else {
+    html += `<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px">Sin transacciones</div>`;
+  }
+  html += `</div></div>`;
+
+  document.getElementById('content').innerHTML = html;
+
+  // Render charts
+  requestAnimationFrame(() => {
+    // Bar chart
+    const barCtx = document.getElementById('bar-chart');
+    if (barCtx) {
+      if (charts.bar) charts.bar.destroy();
+      charts.bar = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+          labels: cats,
+          datasets: [
+            { label: 'Presupuesto', data: cats.map(c=>progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Presupuesto']||0),0)), backgroundColor: 'rgba(79,124,247,.3)', borderColor: 'rgba(79,124,247,.8)', borderWidth: 1 },
+            { label: 'Gastado', data: cats.map(c=>{const g=progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Gastado']||0),0);const p2=progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Presupuesto']||0),0);const pp=pct(g,p2);return g;}), backgroundColor: cats.map(c=>{const g=progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Gastado']||0),0);const p2=progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Presupuesto']||0),0);const pp=pct(g,p2);return pp>=100?'rgba(248,113,113,.8)':pp>=90?'rgba(251,191,36,.8)':'rgba(52,211,153,.8)';}), borderWidth: 0 }
+          ]
+        },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v=>fmtS(v), color: '#6b7280', font:{size:10} }, grid: { color: 'rgba(255,255,255,.05)' } }, y: { ticks: { color: '#9ca3af', font:{size:11} }, grid: { display: false } } } }
+      });
+    }
+
+    // Line chart
+    const lineCtx = document.getElementById('line-chart');
+    if (lineCtx) {
+      if (charts.line) charts.line.destroy();
+      const datasets = [{ label: 'Gastos', data: flujo.map(r=>r['Gastos']||0), borderColor: '#f87171', backgroundColor: 'rgba(248,113,113,.1)', fill: true, tension: .3, pointRadius: 3, borderWidth: 2 }];
+      if (ingreso) {
+        datasets.push({ label: 'Ingreso', data: flujo.map(r=>r['Ingreso']||0), borderColor: '#34d399', backgroundColor: 'transparent', borderDash: [6,3], tension: 0, pointRadius: 0, borderWidth: 1.5 });
+        datasets.push({ label: 'Resultado', data: flujo.map(r=>r['Resultado']||0), borderColor: '#4f7cf7', backgroundColor: 'rgba(79,124,247,.1)', fill: true, tension: .3, pointRadius: 3, borderWidth: 1.5 });
+      }
+      charts.line = new Chart(lineCtx, {
+        type: 'line',
+        data: { labels: meses, datasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9ca3af', font:{size:11}, boxWidth:12 } } }, scales: { y: { ticks: { callback: v=>fmtS(v), color: '#6b7280', font:{size:10} }, grid: { color: 'rgba(255,255,255,.05)' } }, x: { ticks: { color: '#9ca3af', font:{size:10} }, grid: { display: false } } } }
+      });
+    }
+  });
+}
+
+// Cargar datos al inicio y refrescar cada 5 minutos
+loadAll();
+setInterval(loadAll, 5 * 60 * 1000);
+</script>
+</body>
+</html>
