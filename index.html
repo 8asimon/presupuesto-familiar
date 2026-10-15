@@ -112,9 +112,8 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .alert-banner { background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: var(--red); }
-  .chart-wrap { position: relative; height: 320px; }
+  .chart-wrap { position: relative; height: 340px; }
 
-  /* Selector de categoría para el histograma */
   .cat-selector { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
   .cat-pill { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); font-size: 11px; padding: 5px 10px; border-radius: 20px; cursor: pointer; transition: all .2s; }
   .cat-pill:hover { color: var(--text); }
@@ -126,7 +125,6 @@
   .evo-stat-value { font-size: 15px; font-weight: 600; }
   .evo-stat-sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
 
-  /* Tarjetas de recomendaciones */
   .rec-card { background: linear-gradient(135deg, rgba(79,124,247,.1), rgba(167,139,250,.1)); border: 1px solid rgba(79,124,247,.3); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; display: flex; gap: 12px; align-items: flex-start; }
   .rec-card.warn { background: linear-gradient(135deg, rgba(251,191,36,.1), rgba(248,113,113,.1)); border-color: rgba(251,191,36,.3); }
   .rec-card.danger { background: linear-gradient(135deg, rgba(248,113,113,.1), rgba(220,38,38,.1)); border-color: rgba(248,113,113,.3); }
@@ -159,12 +157,28 @@
 const SHEET_ID = '1-2q9EyhkTXmYILgS5mnQSpAsjWN4TwOnmVvr9CRYgts';
 const API = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=`;
 
+const HOJAS_PRESUPUESTO = {
+  simon: 'Presupuesto Simón',
+  alejandra: 'Presupuesto Alejandra',
+  hogar: 'Presupuesto Hogar'
+};
+
+const MESES_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+function nombreMes(ym) {
+  const [y, m] = ym.split('-');
+  const idx = parseInt(m) - 1;
+  if (idx >= 0 && idx < 12) return MESES_ES[idx] + " '" + String(y).substring(2);
+  return ym;
+}
+
 let currentTab = 'simon';
 let allData = {};
 let charts = {};
 let txFilter = 'all';
 let txSearch = '';
 let catSeleccionada = null;
+// historial[tab] = { meses: ['2026-04', ...], porCat: { 'Hogar': { '2026-04': 123, ... }, ... } }
+let historial = { simon: null, alejandra: null, hogar: null };
 
 const CAT_ICONS = {
   'Hogar':'🏠','Comida':'🍔','Transporte':'🚗','Deudas':'💳',
@@ -214,6 +228,16 @@ function mesDeFecha(v) {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
 }
 
+// Fetch "raw" sin encabezado — porque las hojas de presupuesto tienen filas de texto, no una tabla
+async function fetchSheetRaw(name) {
+  const url = API + encodeURIComponent(name) + '&headers=0';
+  const res  = await fetch(url);
+  const text = await res.text();
+  const json = JSON.parse(text.replace(/^[^{]+/, '').replace(/[^}]+$/, ''));
+  const rows = json.table.rows.map(r => r.c.map(cell => cell ? cell.v : null));
+  return rows;
+}
+
 async function fetchSheet(name) {
   const url = API + encodeURIComponent(name);
   const res  = await fetch(url);
@@ -228,9 +252,70 @@ async function fetchSheet(name) {
   return rows;
 }
 
+// Parsea la hoja "Presupuesto X" buscando el bloque "HISTORIAL GASTOS POR CATEGORÍA"
+// Devuelve { meses: ['2026-04', ...], porCat: { 'Hogar': { '2026-04': 123, ... }, ... } }
+function parsearHistorial(rows) {
+  if (!rows || !rows.length) return { meses: [], porCat: {} };
+
+  // Encontrar la fila que empieza con "HISTORIAL GASTOS"
+  let startIdx = -1;
+  for (let i = 0; i < rows.length; i++) {
+    const first = String(rows[i][0] || '').toUpperCase();
+    if (first.includes('HISTORIAL') && first.includes('CATEGOR')) {
+      startIdx = i;
+      break;
+    }
+  }
+  if (startIdx === -1) return { meses: [], porCat: {} };
+
+  // La siguiente fila es encabezados: ['Categoría', '2026-04', '2026-05', ...]
+  const headerRow = rows[startIdx + 1];
+  if (!headerRow) return { meses: [], porCat: {} };
+
+  // Extraer meses (celdas 2 en adelante)
+  const meses = [];
+  for (let i = 1; i < headerRow.length; i++) {
+    const v = headerRow[i];
+    if (v === null || v === undefined || v === '') continue;
+    let mesStr = '';
+    if (v instanceof Date) {
+      mesStr = v.getFullYear() + '-' + String(v.getMonth()+1).padStart(2,'0');
+    } else if (typeof v === 'string') {
+      const m = v.match(/(\d{4})-(\d{1,2})/);
+      if (m) mesStr = m[1] + '-' + String(m[2]).padStart(2,'0');
+      else {
+        const dm = v.match(/Date\((\d+),(\d+)/);
+        if (dm) mesStr = dm[1] + '-' + String(+dm[2]+1).padStart(2,'0');
+      }
+    } else if (typeof v === 'number') {
+      // Serial number de fecha
+      const d = new Date((v - 25569) * 86400 * 1000);
+      mesStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    }
+    if (mesStr) meses.push(mesStr);
+  }
+
+  // Filas de categoría hasta encontrar "TOTAL GASTOS" o línea vacía
+  const porCat = {};
+  for (let i = startIdx + 2; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row || !row[0]) break;
+    const cat = String(row[0]).trim();
+    if (cat.toUpperCase().includes('TOTAL') || cat === '—' || cat === '') break;
+
+    porCat[cat] = {};
+    for (let j = 0; j < meses.length; j++) {
+      const val = parseFloat(row[j + 1]) || 0;
+      porCat[cat][meses[j]] = val;
+    }
+  }
+
+  return { meses, porCat };
+}
+
 async function loadAll() {
   try {
-    const [sp, ap, hp, sf, af, hf, tx] = await Promise.all([
+    const [sp, ap, hp, sf, af, hf, tx, histSimon, histAle, histHogar] = await Promise.all([
       fetchSheet('LS_Simon_Progreso'),
       fetchSheet('LS_Alejandra_Progreso'),
       fetchSheet('LS_Hogar_Progreso'),
@@ -238,12 +323,19 @@ async function loadAll() {
       fetchSheet('LS_Alejandra_Flujo'),
       fetchSheet('LS_Hogar_Flujo'),
       fetchSheet('Transacciones'),
+      fetchSheetRaw(HOJAS_PRESUPUESTO.simon),
+      fetchSheetRaw(HOJAS_PRESUPUESTO.alejandra),
+      fetchSheetRaw(HOJAS_PRESUPUESTO.hogar),
     ]);
     allData = { simon: { progreso: sp, flujo: sf }, alejandra: { progreso: ap, flujo: af }, hogar: { progreso: hp, flujo: hf }, tx };
+    historial.simon = parsearHistorial(histSimon);
+    historial.alejandra = parsearHistorial(histAle);
+    historial.hogar = parsearHistorial(histHogar);
     document.getElementById('last-update').textContent = 'Actualizado: ' + new Date().toLocaleTimeString('es-CO');
     renderTab(currentTab);
   } catch(e) {
-    document.getElementById('content').innerHTML = `<div class="loading">Error cargando datos. Verifica que el Sheet es público.</div>`;
+    console.error(e);
+    document.getElementById('content').innerHTML = `<div class="loading">Error cargando datos: ${e.message}</div>`;
   }
 }
 
@@ -254,31 +346,6 @@ function setTab(tab) {
   catSeleccionada = null;
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['simon','alejandra','hogar'][i]===tab));
   renderTab(tab);
-}
-
-// Datos agregados por categoría y mes a partir de Transacciones
-function evolucionPorCategoria(tab) {
-  const txs = (allData.tx || []).filter(r => {
-    if (tab === 'hogar') return (r['Bucket']||'').toLowerCase() === 'ambos';
-    return (r['Persona']||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'') === tab;
-  });
-
-  const porCatMes = {}; // { 'Categoria': { 'yyyy-MM': total, ... } }
-  const mesesSet = new Set();
-
-  txs.forEach(r => {
-    let mes = r['Mes'] ? String(r['Mes']).substring(0,7) : mesDeFecha(r['Fecha']);
-    if (!mes || mes.length < 7) return;
-    const cat = r['Categoría'] || 'Sin categoría';
-    if (cat === 'Por Definir') return;
-    const monto = parseFloat(r['Monto']) || 0;
-    if (!porCatMes[cat]) porCatMes[cat] = {};
-    porCatMes[cat][mes] = (porCatMes[cat][mes] || 0) + monto;
-    mesesSet.add(mes);
-  });
-
-  const meses = [...mesesSet].sort();
-  return { meses, porCatMes };
 }
 
 function presupuestoPorCategoria(tab) {
@@ -292,38 +359,36 @@ function presupuestoPorCategoria(tab) {
   return porCat;
 }
 
-// Recomendaciones automáticas basadas en comportamiento histórico
+// Recomendaciones basadas en el historial real (hoja Presupuesto)
 function generarRecomendaciones(tab) {
-  const evo = evolucionPorCategoria(tab);
+  const hist = historial[tab];
+  if (!hist || !hist.meses.length) return [];
   const pres = presupuestoPorCategoria(tab);
   const mesActual = new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0');
-  const mesesHistoricos = evo.meses.filter(m => m !== mesActual);
+  const mesesHistoricos = hist.meses.filter(m => m !== mesActual);
 
   const recs = [];
-
-  Object.keys(evo.porCatMes).forEach(cat => {
+  Object.keys(hist.porCat).forEach(cat => {
+    if (cat === 'Por Definir') return;
     const presCat = pres[cat] || 0;
     if (presCat === 0) return;
 
-    const historicos = mesesHistoricos.map(m => evo.porCatMes[cat][m] || 0);
-    if (historicos.length < 3) return; // necesitamos al menos 3 meses
+    const historicos = mesesHistoricos.map(m => hist.porCat[cat][m] || 0).filter(v => v > 0);
+    if (historicos.length < 3) return;
 
     const promedio = historicos.reduce((s,v)=>s+v,0) / historicos.length;
     const excesos = historicos.filter(v => v > presCat).length;
     const porcentajeExceso = Math.round((promedio - presCat) / presCat * 100);
 
-    // Recomendación: subir presupuesto si excede consistentemente
-    if (excesos >= Math.ceil(mesesHistoricos.length * 0.6) && promedio > presCat * 1.1) {
+    if (excesos >= Math.ceil(historicos.length * 0.6) && promedio > presCat * 1.1) {
       const nuevoSugerido = Math.ceil(promedio / 10000) * 10000;
       recs.push({
         tipo: 'danger',
         icon: '📈',
         titulo: `Considera subir presupuesto de ${cat}`,
-        desc: `Has excedido <b>${cat}</b> en <b>${excesos} de ${mesesHistoricos.length} meses</b>. Promedio: <b>${fmt(promedio)}</b> vs presupuesto <b>${fmt(presCat)}</b> (+${porcentajeExceso}%). Sugerencia: subirlo a <b>${fmt(nuevoSugerido)}</b>.`
+        desc: `Has excedido <b>${cat}</b> en <b>${excesos} de ${historicos.length} meses</b>. Promedio: <b>${fmt(promedio)}</b> vs presupuesto <b>${fmt(presCat)}</b> (+${porcentajeExceso}%). Sugerencia: subirlo a <b>${fmt(nuevoSugerido)}</b>.`
       });
-    }
-    // Recomendación: bajar presupuesto si consistentemente queda muy por debajo
-    else if (promedio < presCat * 0.5 && historicos.filter(v => v < presCat * 0.6).length >= Math.ceil(mesesHistoricos.length * 0.7)) {
+    } else if (promedio < presCat * 0.5 && historicos.filter(v => v < presCat * 0.6).length >= Math.ceil(historicos.length * 0.7)) {
       const nuevoSugerido = Math.ceil(promedio * 1.2 / 10000) * 10000;
       recs.push({
         tipo: 'default',
@@ -332,11 +397,11 @@ function generarRecomendaciones(tab) {
         desc: `Solo usas en promedio <b>${fmt(promedio)}</b> de los <b>${fmt(presCat)}</b> asignados (${pct(promedio,presCat)}%). Podrías reducirlo a <b>${fmt(nuevoSugerido)}</b> y reasignar la diferencia.`
       });
     }
-    // Mes actual muy acelerado vs promedio
-    const gastoMesActual = evo.porCatMes[cat][mesActual] || 0;
+
+    const gastoMesActual = hist.porCat[cat][mesActual] || 0;
     const diaHoy = new Date().getDate();
     const diasMes = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate();
-    const proyeccion = gastoMesActual / diaHoy * diasMes;
+    const proyeccion = diaHoy > 0 ? gastoMesActual / diaHoy * diasMes : 0;
     if (proyeccion > promedio * 1.3 && gastoMesActual > 0 && historicos.length >= 2) {
       const incPct = Math.round((proyeccion - promedio) / promedio * 100);
       recs.push({
@@ -385,20 +450,9 @@ function filtrarTransacciones(tab) {
   return txs;
 }
 
-function updateSearch(val) {
-  txSearch = val;
-  renderTxList();
-}
-
-function toggleFilter(f) {
-  txFilter = f;
-  renderTxList();
-}
-
-function seleccionarCategoria(cat) {
-  catSeleccionada = cat;
-  renderEvolucion();
-}
+function updateSearch(val) { txSearch = val; renderTxList(); }
+function toggleFilter(f) { txFilter = f; renderTxList(); }
+function seleccionarCategoria(cat) { catSeleccionada = cat; renderEvolucion(); }
 
 function renderTxList() {
   const txs = filtrarTransacciones(currentTab);
@@ -431,34 +485,51 @@ function renderTxs(txs) {
 }
 
 function renderEvolucion() {
-  const evo = evolucionPorCategoria(currentTab);
+  const hist = historial[currentTab];
   const pres = presupuestoPorCategoria(currentTab);
-  const cats = Object.keys(evo.porCatMes);
+  const el = document.getElementById('evo-container');
+  if (!el) return;
+
+  if (!hist || !hist.meses.length) {
+    el.innerHTML = `<div class="rec-empty">Sin historial disponible todavía</div>`;
+    return;
+  }
+
+  // Deduplicar categorías: solo las que están en el presupuesto activo
+  const catsPresupuesto = Object.keys(pres);
+  const cats = Object.keys(hist.porCat).filter(c => c !== 'Por Definir');
+  // Mantener el orden del presupuesto si está disponible, sino alfabético
+  cats.sort((a, b) => {
+    const ia = catsPresupuesto.indexOf(a);
+    const ib = catsPresupuesto.indexOf(b);
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
 
   if (!catSeleccionada || !cats.includes(catSeleccionada)) {
     catSeleccionada = cats[0] || null;
   }
 
-  const el = document.getElementById('evo-container');
-  if (!el) return;
-
-  // Pills de selección de categoría
-  const pills = cats.map(c => `
-    <span class="cat-pill ${c===catSeleccionada?'active':''}" onclick="seleccionarCategoria('${c.replace(/'/g,"\\'")}')">${CAT_ICONS[c]||'•'} ${c}</span>
-  `).join('');
+  const pills = cats.map(c => {
+    const active = c === catSeleccionada;
+    return `<span class="cat-pill ${active?'active':''}" onclick="seleccionarCategoria('${c.replace(/'/g,"\\'")}')">${CAT_ICONS[c]||'•'} ${c}</span>`;
+  }).join('');
 
   if (!catSeleccionada) {
-    el.innerHTML = `<div class="cat-selector">${pills}</div><div class="rec-empty">Sin datos históricos</div>`;
+    el.innerHTML = `<div class="cat-selector">${pills}</div><div class="rec-empty">Sin datos</div>`;
     return;
   }
 
-  const datosCat = evo.meses.map(m => evo.porCatMes[catSeleccionada][m] || 0);
+  const datosCat = hist.meses.map(m => hist.porCat[catSeleccionada]?.[m] || 0);
   const presCat = pres[catSeleccionada] || 0;
-  const promedio = datosCat.length ? datosCat.reduce((s,v)=>s+v,0) / datosCat.length : 0;
-  const mesActualIdx = evo.meses.length - 1;
+  const datosNoCero = datosCat.filter(v => v > 0);
+  const promedio = datosNoCero.length ? datosNoCero.reduce((s,v)=>s+v,0) / datosNoCero.length : 0;
+  const mesActualIdx = hist.meses.length - 1;
   const gastoMesActual = datosCat[mesActualIdx] || 0;
   const gastoMesAnterior = datosCat[mesActualIdx - 1] || 0;
-  const incPct = gastoMesAnterior > 0 ? Math.round((gastoMesActual - gastoMesAnterior) / gastoMesAnterior * 100) : 0;
+  const incPct = gastoMesAnterior > 0 ? Math.round((gastoMesActual - gastoMesAnterior) / gastoMesAnterior * 100) : null;
   const diffPromedio = promedio > 0 ? Math.round((gastoMesActual - promedio) / promedio * 100) : 0;
 
   el.innerHTML = `
@@ -467,7 +538,7 @@ function renderEvolucion() {
       <div class="evo-stat">
         <div class="evo-stat-label">Promedio histórico</div>
         <div class="evo-stat-value">${fmt(promedio)}</div>
-        <div class="evo-stat-sub">${datosCat.length} meses</div>
+        <div class="evo-stat-sub">${datosNoCero.length} meses con datos</div>
       </div>
       <div class="evo-stat">
         <div class="evo-stat-label">Mes actual</div>
@@ -476,7 +547,7 @@ function renderEvolucion() {
       </div>
       <div class="evo-stat">
         <div class="evo-stat-label">vs mes anterior</div>
-        <div class="evo-stat-value ${incPct > 0 ? 'red' : 'green'}">${incPct>=0?'+':''}${incPct}%</div>
+        <div class="evo-stat-value ${incPct !== null && incPct > 0 ? 'red' : 'green'}">${incPct !== null ? (incPct>=0?'+':'')+incPct+'%' : '—'}</div>
         <div class="evo-stat-sub">${fmt(gastoMesAnterior)} → ${fmt(gastoMesActual)}</div>
       </div>
       <div class="evo-stat">
@@ -488,7 +559,6 @@ function renderEvolucion() {
     <div class="chart-wrap"><canvas id="evo-chart"></canvas></div>
   `;
 
-  // Render chart con histograma + línea de promedio + línea de presupuesto
   requestAnimationFrame(() => {
     const ctx = document.getElementById('evo-chart');
     if (!ctx) return;
@@ -496,30 +566,25 @@ function renderEvolucion() {
 
     const colorPrincipal = CAT_COLORS[catSeleccionada] || '#4f7cf7';
     const barColors = datosCat.map((_, i) => i === mesActualIdx ? colorPrincipal : colorPrincipal + '99');
-
-    // Etiquetas con % de cambio en la barra actual
-    const dataLabels = datosCat.map((v, i) => {
-      if (i === mesActualIdx && gastoMesAnterior > 0) {
-        return `${fmtS(v)} (${incPct>=0?'+':''}${incPct}%)`;
-      }
-      return fmtS(v);
-    });
+    const labels = hist.meses.map(nombreMes);
 
     charts.evo = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: evo.meses,
+        labels,
         datasets: [{
           label: catSeleccionada,
           data: datosCat,
           backgroundColor: barColors,
           borderRadius: 4,
-          borderWidth: 0
+          borderWidth: 0,
+          datalabels: true
         }]
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { top: 20 } },
         plugins: {
           legend: { display: false },
           tooltip: {
@@ -546,9 +611,9 @@ function renderEvolucion() {
                 borderDash: [6, 4],
                 label: {
                   display: true,
-                  content: `Promedio: ${fmtS(promedio)}`,
+                  content: `Prom: ${fmtS(promedio)}`,
                   position: 'end',
-                  backgroundColor: 'rgba(251,191,36,.9)',
+                  backgroundColor: 'rgba(251,191,36,.95)',
                   color: '#1a1d27',
                   font: { size: 10, weight: 'bold' },
                   padding: 4,
@@ -564,9 +629,9 @@ function renderEvolucion() {
                 borderDash: [2, 2],
                 label: {
                   display: true,
-                  content: `Presup: ${fmtS(presCat)}`,
+                  content: `Ppto: ${fmtS(presCat)}`,
                   position: 'start',
-                  backgroundColor: 'rgba(79,124,247,.9)',
+                  backgroundColor: 'rgba(79,124,247,.95)',
                   color: 'white',
                   font: { size: 10, weight: 'bold' },
                   padding: 4,
@@ -578,9 +643,28 @@ function renderEvolucion() {
         },
         scales: {
           y: { ticks: { callback: v=>fmtS(v), color: '#6b7280', font:{size:10} }, grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true },
-          x: { ticks: { color: '#9ca3af', font:{size:10} }, grid: { display: false } }
+          x: { ticks: { color: '#9ca3af', font:{size:11} }, grid: { display: false } }
         }
-      }
+      },
+      plugins: [{
+        id: 'incrementos',
+        afterDatasetsDraw(chart) {
+          const { ctx: cctx, data } = chart;
+          const meta = chart.getDatasetMeta(0);
+          const vals = data.datasets[0].data;
+          meta.data.forEach((bar, i) => {
+            if (i === 0 || vals[i - 1] === 0) return;
+            const inc = Math.round((vals[i] - vals[i - 1]) / vals[i - 1] * 100);
+            const txt = `${inc>=0?'▲':'▼'}${Math.abs(inc)}%`;
+            cctx.save();
+            cctx.fillStyle = inc > 0 ? '#f87171' : (inc < 0 ? '#34d399' : '#9ca3af');
+            cctx.font = 'bold 10px -apple-system, sans-serif';
+            cctx.textAlign = 'center';
+            cctx.fillText(txt, bar.x, bar.y - 6);
+            cctx.restore();
+          });
+        }
+      }]
     });
   });
 }
@@ -617,7 +701,6 @@ function renderTab(tab) {
 
   // Grid: progreso + presupuesto vs gastado
   html += `<div class="grid2">`;
-
   html += `<div class="card"><div class="card-title">Progreso del mes</div>`;
   const cats = [...new Set(progreso.map(r=>r['Categoria']))];
   cats.forEach(cat => {
@@ -679,14 +762,12 @@ function renderTab(tab) {
   }
   html += `</table></div></div>`;
 
-  // Evolución por categoría + Recomendaciones
+  // Evolución mensual por categoría
   html += `<div class="card" style="margin-bottom:16px"><div class="card-title">Evolución mensual por categoría</div><div id="evo-container"></div></div>`;
 
-  // Grid inferior: recomendaciones + transacciones
+  // Grid inferior
   html += `<div class="grid2">`;
-
   html += `<div class="card"><div class="card-title">💡 Recomendaciones de ajuste</div><div id="rec-container"></div></div>`;
-
   html += `<div class="card">
     <div class="card-title">
       <span>Transacciones <span class="tx-count" id="tx-count">—</span></span>
@@ -698,7 +779,6 @@ function renderTab(tab) {
     </div>
     <div class="tx-list" id="tx-list-container"></div>
   </div>`;
-
   html += `</div>`;
 
   document.getElementById('content').innerHTML = html;
@@ -706,7 +786,6 @@ function renderTab(tab) {
   renderEvolucion();
   renderTxList();
 
-  // Recomendaciones
   const recs = generarRecomendaciones(tab);
   const recContainer = document.getElementById('rec-container');
   if (recContainer) {
@@ -725,7 +804,6 @@ function renderTab(tab) {
     }
   }
 
-  // Bar chart presupuesto vs gastado
   requestAnimationFrame(() => {
     const barCtx = document.getElementById('bar-chart');
     if (barCtx) {
