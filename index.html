@@ -431,6 +431,25 @@ function setTab(tab) {
   renderTab(tab);
 }
 
+// Calcula el gasto del mes actual para una categoría leyendo directamente de Transacciones
+function calcularGastoMesActualDesdeTx(tab, categoria, mesActual) {
+  const txs = (allData.tx || []).filter(r => {
+    if (tab === 'hogar') return (r['Bucket']||'').toLowerCase() === 'ambos';
+    return (r['Persona']||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'') === tab;
+  });
+
+  const catNorm = String(categoria||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  let total = 0;
+  txs.forEach(r => {
+    let mes = r['Mes'] ? String(r['Mes']).substring(0,7) : mesDeFecha(r['Fecha']);
+    if (mes !== mesActual) return;
+    const catTx = String(r['Categoría']||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+    if (catTx !== catNorm) return;
+    total += parseFloat(r['Monto']) || 0;
+  });
+  return total;
+}
+
 function presupuestoPorCategoria(tab) {
   const progreso = allData[tab]?.progreso || [];
   const porCat = {};
@@ -481,7 +500,9 @@ function generarRecomendaciones(tab) {
       });
     }
 
-    const gastoMesActual = hist.porCat[cat][mesActual] || 0;
+    const gastoHist = hist.porCat[cat][mesActual] || 0;
+    const gastoTx = calcularGastoMesActualDesdeTx(tab, cat, mesActual);
+    const gastoMesActual = Math.max(gastoHist, gastoTx);
     const diaHoy = new Date().getDate();
     const diasMes = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate();
     const proyeccion = diaHoy > 0 ? gastoMesActual / diaHoy * diasMes : 0;
@@ -613,7 +634,17 @@ function renderEvolucion() {
     mesesConActual.sort();
   }
 
-  const datosCat = mesesConActual.map(m => hist.porCat[catSeleccionada]?.[m] || 0);
+  // Calcular el gasto del mes actual directamente desde Transacciones (más confiable)
+  const gastoMesActualDesdeTx = calcularGastoMesActualDesdeTx(currentTab, catSeleccionada, mesActualStr);
+
+  const datosCat = mesesConActual.map(m => {
+    if (m === mesActualStr) {
+      // Preferir el cálculo desde Transacciones si tiene datos; sino usar el historial
+      const histVal = hist.porCat[catSeleccionada]?.[m] || 0;
+      return Math.max(gastoMesActualDesdeTx, histVal);
+    }
+    return hist.porCat[catSeleccionada]?.[m] || 0;
+  });
   const presCat = pres[catSeleccionada] || 0;
 
   // Para el promedio histórico: excluir el mes actual (está en curso)
