@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
 <title>Presupuesto Familiar</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
@@ -129,11 +129,77 @@
   .rec-card.warn { background: linear-gradient(135deg, rgba(251,191,36,.1), rgba(248,113,113,.1)); border-color: rgba(251,191,36,.3); }
   .rec-card.danger { background: linear-gradient(135deg, rgba(248,113,113,.1), rgba(220,38,38,.1)); border-color: rgba(248,113,113,.3); }
   .rec-icon { font-size: 20px; flex-shrink: 0; line-height: 1; }
-  .rec-body { flex: 1; }
+  .rec-body { flex: 1; min-width: 0; }
   .rec-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; color: var(--text); }
   .rec-desc { font-size: 12px; color: var(--text2); line-height: 1.4; }
   .rec-desc b { color: var(--text); }
   .rec-empty { color: var(--text3); font-size: 13px; text-align: center; padding: 20px; }
+
+  /* ============================================================
+     MOBILE RESPONSIVE
+     ============================================================ */
+  @media (max-width: 768px) {
+    .header { padding: 12px 16px; }
+    .header h1 { font-size: 15px; }
+    .header-right { font-size: 10px; }
+    .tabs { padding: 0 12px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tab { padding: 12px 16px; font-size: 12px; flex-shrink: 0; }
+
+    .content { padding: 12px; }
+
+    .metrics { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 16px; }
+    .metric { padding: 12px 14px; }
+    .metric-label { font-size: 9px; }
+    .metric-value { font-size: 17px; }
+    .metric-sub { font-size: 10px; }
+
+    .grid2 { gap: 12px; margin-bottom: 12px; }
+    .card { padding: 14px; }
+    .card-title { font-size: 11px; margin-bottom: 12px; }
+
+    .chart-wrap { height: 260px; }
+
+    .evo-summary { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+    .evo-stat { padding: 8px 10px; }
+    .evo-stat-label { font-size: 9px; }
+    .evo-stat-value { font-size: 13px; }
+    .evo-stat-sub { font-size: 9px; }
+
+    .cat-pill { font-size: 10px; padding: 4px 8px; }
+
+    .cat-header { padding: 8px 10px; }
+    .cat-stats { gap: 8px; font-size: 10px; }
+
+    .progress-name { font-size: 12px; }
+    .progress-vals { font-size: 10px; }
+    .progress-disponible { font-size: 10px; }
+
+    .tx-list { max-height: 400px; }
+    .tx-row { padding: 8px 0; gap: 10px; }
+    .tx-icon { width: 32px; height: 32px; font-size: 13px; }
+    .tx-name { font-size: 12px; }
+    .tx-meta { font-size: 10px; }
+    .tx-amount { font-size: 12px; }
+    .tx-search { width: 110px; font-size: 11px; padding: 5px 8px; }
+
+    .rec-card { padding: 10px 12px; gap: 10px; }
+    .rec-icon { font-size: 18px; }
+    .rec-title { font-size: 12px; }
+    .rec-desc { font-size: 11px; }
+
+    .flujo-table { font-size: 11px; }
+    .flujo-table th, .flujo-table td { padding: 5px 8px; }
+
+    .alert-banner { padding: 8px 12px; font-size: 11px; }
+  }
+
+  @media (max-width: 420px) {
+    .metrics { grid-template-columns: 1fr; }
+    .evo-summary { grid-template-columns: 1fr 1fr; }
+    .chart-wrap { height: 240px; }
+    .card-title { flex-wrap: wrap; gap: 6px; }
+    .tx-search { width: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -272,8 +338,8 @@ function parsearHistorial(rows) {
   const headerRow = rows[startIdx + 1];
   if (!headerRow) return { meses: [], porCat: {} };
 
-  // Extraer meses (celdas 2 en adelante)
-  const meses = [];
+  // Extraer meses (celdas 2 en adelante). Guardamos pares [idxColumna, mesStr]
+  const mesesPorCol = []; // [{col: 1, mes: '2026-04'}, ...]
   for (let i = 1; i < headerRow.length; i++) {
     const v = headerRow[i];
     if (v === null || v === undefined || v === '') continue;
@@ -288,12 +354,17 @@ function parsearHistorial(rows) {
         if (dm) mesStr = dm[1] + '-' + String(+dm[2]+1).padStart(2,'0');
       }
     } else if (typeof v === 'number') {
-      // Serial number de fecha
       const d = new Date((v - 25569) * 86400 * 1000);
       mesStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
     }
-    if (mesStr) meses.push(mesStr);
+    if (mesStr) mesesPorCol.push({ col: i, mes: mesStr });
   }
+
+  // Deduplicar meses: si un mes aparece varias veces, nos quedamos con la última columna
+  // (la más reciente, en caso de que haya datos nuevos escritos a la derecha)
+  const colPorMes = {}; // { '2026-04': columnaFinal }
+  mesesPorCol.forEach(({col, mes}) => { colPorMes[mes] = col; });
+  const meses = Object.keys(colPorMes).sort();
 
   // Filas de categoría hasta encontrar "TOTAL GASTOS" o línea vacía
   const porCat = {};
@@ -304,10 +375,22 @@ function parsearHistorial(rows) {
     if (cat.toUpperCase().includes('TOTAL') || cat === '—' || cat === '') break;
 
     porCat[cat] = {};
-    for (let j = 0; j < meses.length; j++) {
-      const val = parseFloat(row[j + 1]) || 0;
-      porCat[cat][meses[j]] = val;
-    }
+    meses.forEach(mes => {
+      const col = colPorMes[mes];
+      // Si hay múltiples columnas para el mismo mes, sumar todas por si acaso
+      let val = 0;
+      mesesPorCol.filter(x => x.mes === mes).forEach(x => {
+        val += parseFloat(row[x.col]) || 0;
+      });
+      // Si todas las columnas duplicadas tienen el mismo valor (muy probable), tomar solo una
+      const colsEsteMs = mesesPorCol.filter(x => x.mes === mes);
+      if (colsEsteMs.length > 1) {
+        const valores = colsEsteMs.map(x => parseFloat(row[x.col]) || 0);
+        const todosIguales = valores.every(v => v === valores[0]);
+        val = todosIguales ? valores[0] : val;
+      }
+      porCat[cat][mes] = val;
+    });
   }
 
   return { meses, porCat };
@@ -522,13 +605,26 @@ function renderEvolucion() {
     return;
   }
 
-  const datosCat = hist.meses.map(m => hist.porCat[catSeleccionada]?.[m] || 0);
+  // Mes actual real (del sistema). Lo forzamos a aparecer en la lista aunque no haya datos aún
+  const mesActualStr = new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0');
+  let mesesConActual = [...hist.meses];
+  if (!mesesConActual.includes(mesActualStr)) {
+    mesesConActual.push(mesActualStr);
+    mesesConActual.sort();
+  }
+
+  const datosCat = mesesConActual.map(m => hist.porCat[catSeleccionada]?.[m] || 0);
   const presCat = pres[catSeleccionada] || 0;
-  const datosNoCero = datosCat.filter(v => v > 0);
-  const promedio = datosNoCero.length ? datosNoCero.reduce((s,v)=>s+v,0) / datosNoCero.length : 0;
-  const mesActualIdx = hist.meses.length - 1;
+
+  // Para el promedio histórico: excluir el mes actual (está en curso)
+  const datosHistoricos = mesesConActual
+    .map((m, i) => ({ mes: m, val: datosCat[i] }))
+    .filter(x => x.mes !== mesActualStr && x.val > 0);
+  const promedio = datosHistoricos.length ? datosHistoricos.reduce((s,x)=>s+x.val,0) / datosHistoricos.length : 0;
+
+  const mesActualIdx = mesesConActual.indexOf(mesActualStr);
   const gastoMesActual = datosCat[mesActualIdx] || 0;
-  const gastoMesAnterior = datosCat[mesActualIdx - 1] || 0;
+  const gastoMesAnterior = mesActualIdx > 0 ? (datosCat[mesActualIdx - 1] || 0) : 0;
   const incPct = gastoMesAnterior > 0 ? Math.round((gastoMesActual - gastoMesAnterior) / gastoMesAnterior * 100) : null;
   const diffPromedio = promedio > 0 ? Math.round((gastoMesActual - promedio) / promedio * 100) : 0;
 
@@ -538,10 +634,10 @@ function renderEvolucion() {
       <div class="evo-stat">
         <div class="evo-stat-label">Promedio histórico</div>
         <div class="evo-stat-value">${fmt(promedio)}</div>
-        <div class="evo-stat-sub">${datosNoCero.length} meses con datos</div>
+        <div class="evo-stat-sub">${datosHistoricos.length} meses (sin mes actual)</div>
       </div>
       <div class="evo-stat">
-        <div class="evo-stat-label">Mes actual</div>
+        <div class="evo-stat-label">Mes actual (${nombreMes(mesActualStr)})</div>
         <div class="evo-stat-value ${gastoMesActual > promedio ? 'red' : 'green'}">${fmt(gastoMesActual)}</div>
         <div class="evo-stat-sub ${diffPromedio > 0 ? 'red' : 'green'}">${diffPromedio>=0?'+':''}${diffPromedio}% vs promedio</div>
       </div>
@@ -566,7 +662,7 @@ function renderEvolucion() {
 
     const colorPrincipal = CAT_COLORS[catSeleccionada] || '#4f7cf7';
     const barColors = datosCat.map((_, i) => i === mesActualIdx ? colorPrincipal : colorPrincipal + '99');
-    const labels = hist.meses.map(nombreMes);
+    const labels = mesesConActual.map(nombreMes);
 
     charts.evo = new Chart(ctx, {
       type: 'bar',
