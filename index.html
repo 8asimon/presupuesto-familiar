@@ -52,18 +52,35 @@
   .card-title { font-size: 12px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 16px; }
 
   .progress-item { margin-bottom: 10px; }
-  .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap; }
   .progress-name { font-size: 13px; color: var(--text); }
   .progress-vals { font-size: 11px; color: var(--text3); }
-  .progress-bar { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .progress-disponible { font-size: 11px; color: var(--text2); margin-top: 2px; }
+  .progress-disponible .disp-label { color: var(--text3); }
+  .progress-disponible .disp-val { font-weight: 600; }
+  .progress-disponible.pos .disp-val { color: var(--green); }
+  .progress-disponible.neg .disp-val { color: var(--red); }
+  .progress-bar { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; margin-top: 4px; }
   .progress-fill { height: 100%; border-radius: 3px; transition: width .4s; }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 600; }
   .badge-ok { background: rgba(52,211,153,.15); color: var(--green); }
   .badge-warn { background: rgba(251,191,36,.15); color: var(--yellow); }
   .badge-danger { background: rgba(248,113,113,.15); color: var(--red); }
+  .badge-complete { background: rgba(52,211,153,.25); color: var(--green); border: 1px solid rgba(52,211,153,.5); }
 
-  .cat-header { display: flex; align-items: center; gap-8; padding: 8px 0 4px; border-bottom: 1px solid var(--border); margin-bottom: 6px; margin-top: 12px; }
-  .cat-name { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; }
+  .cat-header { padding: 10px 12px; border-radius: 8px; background: var(--bg3); margin-bottom: 10px; margin-top: 16px; }
+  .cat-header:first-child { margin-top: 0; }
+  .cat-header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .cat-name { font-size: 12px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: .05em; }
+  .cat-totals { font-size: 12px; font-weight: 600; }
+  .cat-stats { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text3); gap: 12px; }
+  .cat-stat { display: flex; gap: 4px; }
+  .cat-stat .val { font-weight: 600; }
+  .cat-stat.pres .val { color: var(--text2); }
+  .cat-stat.gast .val { color: var(--blue); }
+  .cat-stat.disp.pos .val { color: var(--green); }
+  .cat-stat.disp.neg .val { color: var(--red); }
+  .cat-pct { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
 
   .tx-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .tx-row:last-child { border-bottom: none; }
@@ -125,7 +142,7 @@ const CAT_ICONS = {
 function fmt(n) { return '$' + Math.round(n||0).toLocaleString('es-CO'); }
 function fmtS(n) { const a=Math.abs(n||0); return (n<0?'-':'')+'$'+(a>=1000000?(a/1000000).toFixed(1)+'M':a>=1000?Math.round(a/1000)+'k':Math.round(a)); }
 function pct(g,p) { return p>0?Math.round(g/p*100):0; }
-function barColor(p) { return p>=100?'var(--red)':p>=90?'var(--yellow)':'var(--blue)'; }
+function barColor(p) { return p>100?'var(--red)':p>=100?'var(--green)':p>=90?'var(--yellow)':'var(--blue)'; }
 
 async function fetchSheet(name) {
   const url = API + encodeURIComponent(name);
@@ -173,7 +190,7 @@ function renderTab(tab) {
   const flujo    = d.flujo || [];
   const tx       = (allData.tx || []).filter(r => {
     if (tab === 'hogar') return (r['Bucket']||'').toLowerCase() === 'ambos';
-    return (r['Persona']||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'') === tab;
+    return (r['Persona']||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'') === tab;
   }).slice(0,10);
 
   const totalPres = progreso.reduce((s,r)=>s+(r['Presupuesto']||0),0);
@@ -212,20 +229,40 @@ function renderTab(tab) {
     const items = progreso.filter(r=>r['Categoria']===cat);
     const catP  = items.reduce((s,r)=>s+(r['Presupuesto']||0),0);
     const catG  = items.reduce((s,r)=>s+(r['Gastado']||0),0);
+    const catD  = catP - catG;
     const p2    = pct(catG,catP);
-    html += `<div class="cat-header"><span class="cat-name">${CAT_ICONS[cat]||'•'} ${cat}</span><span style="margin-left:auto;font-size:11px;color:var(--text3)">${fmt(catG)} / ${fmt(catP)}</span></div>`;
+    const pctBadgeClass = p2>100?'badge-danger':p2>=100?'badge-complete':p2>=90?'badge-warn':'badge-ok';
+
+    // Header de categoría enriquecido
+    html += `<div class="cat-header">
+      <div class="cat-header-top">
+        <span class="cat-name">${CAT_ICONS[cat]||'•'} ${cat}</span>
+        <span class="cat-pct ${pctBadgeClass}">${p2}%</span>
+      </div>
+      <div class="cat-stats">
+        <span class="cat-stat pres"><span>Presupuesto:</span> <span class="val">${fmt(catP)}</span></span>
+        <span class="cat-stat gast"><span>Gastado:</span> <span class="val">${fmt(catG)}</span></span>
+        <span class="cat-stat disp ${catD>=0?'pos':'neg'}"><span>Disponible:</span> <span class="val">${fmt(catD)}</span></span>
+      </div>
+    </div>`;
+
     items.forEach(r => {
       const g  = r['Gastado']||0;
-      const p3 = pct(g, r['Presupuesto']||0);
-      const badge = p3>=100?'badge-danger':p3>=90?'badge-warn':'badge-ok';
-      const label = p3>=100?'Excedido':p3>=90?'Alerta':'OK';
+      const p  = r['Presupuesto']||0;
+      const disp = p - g;
+      const p3 = pct(g, p);
+      const badge = p3>100?'badge-danger':p3>=100?'badge-complete':p3>=90?'badge-warn':'badge-ok';
+      const label = p3>100?'Excedido':p3>=100?'Completado':p3>=90?'Alerta':'OK';
       html += `<div class="progress-item">
         <div class="progress-header">
           <span class="progress-name">${r['Subcategoria']}</span>
           <span style="display:flex;align-items:center;gap:6px">
-            <span class="progress-vals">${fmt(g)} / ${fmt(r['Presupuesto']||0)}</span>
+            <span class="progress-vals">${fmt(g)} / ${fmt(p)}</span>
             <span class="badge ${badge}">${label}</span>
           </span>
+        </div>
+        <div class="progress-disponible ${disp>=0?'pos':'neg'}">
+          <span class="disp-label">Disponible:</span> <span class="disp-val">${fmt(disp)}</span>
         </div>
         <div class="progress-bar"><div class="progress-fill" style="width:${Math.min(p3,100)}%;background:${barColor(p3)}"></div></div>
       </div>`;
@@ -249,7 +286,7 @@ function renderTab(tab) {
   }
   html += `</table></div></div>`;
 
-  // Gráfica de líneas flujo
+  // Gráfica de líneas flujo + transacciones recientes
   html += `<div class="grid2">`;
   html += `<div class="card"><div class="card-title">Tendencia de gastos</div><div class="chart-wrap"><canvas id="line-chart"></canvas></div></div>`;
 
@@ -278,7 +315,6 @@ function renderTab(tab) {
 
   // Render charts
   requestAnimationFrame(() => {
-    // Bar chart
     const barCtx = document.getElementById('bar-chart');
     if (barCtx) {
       if (charts.bar) charts.bar.destroy();
@@ -288,14 +324,13 @@ function renderTab(tab) {
           labels: cats,
           datasets: [
             { label: 'Presupuesto', data: cats.map(c=>progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Presupuesto']||0),0)), backgroundColor: 'rgba(79,124,247,.3)', borderColor: 'rgba(79,124,247,.8)', borderWidth: 1 },
-            { label: 'Gastado', data: cats.map(c=>{const g=progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Gastado']||0),0);const p2=progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Presupuesto']||0),0);const pp=pct(g,p2);return g;}), backgroundColor: cats.map(c=>{const g=progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Gastado']||0),0);const p2=progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Presupuesto']||0),0);const pp=pct(g,p2);return pp>=100?'rgba(248,113,113,.8)':pp>=90?'rgba(251,191,36,.8)':'rgba(52,211,153,.8)';}), borderWidth: 0 }
+            { label: 'Gastado', data: cats.map(c=>{const g=progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Gastado']||0),0);return g;}), backgroundColor: cats.map(c=>{const g=progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Gastado']||0),0);const p2=progreso.filter(r=>r['Categoria']===c).reduce((s,r)=>s+(r['Presupuesto']||0),0);const pp=pct(g,p2);return pp>100?'rgba(248,113,113,.8)':pp>=100?'rgba(52,211,153,.8)':pp>=90?'rgba(251,191,36,.8)':'rgba(52,211,153,.8)';}), borderWidth: 0 }
           ]
         },
         options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v=>fmtS(v), color: '#6b7280', font:{size:10} }, grid: { color: 'rgba(255,255,255,.05)' } }, y: { ticks: { color: '#9ca3af', font:{size:11} }, grid: { display: false } } } }
       });
     }
 
-    // Line chart
     const lineCtx = document.getElementById('line-chart');
     if (lineCtx) {
       if (charts.line) charts.line.destroy();
@@ -313,7 +348,6 @@ function renderTab(tab) {
   });
 }
 
-// Cargar datos al inicio y refrescar cada 5 minutos
 loadAll();
 setInterval(loadAll, 5 * 60 * 1000);
 </script>
