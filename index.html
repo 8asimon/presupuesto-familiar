@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Presupuesto Familiar</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1"></script>
 <style>
   :root {
     --bg: #0f1117;
@@ -45,11 +46,10 @@
   .yellow { color: var(--yellow); }
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-  @media (max-width: 900px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
 
   .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
-  .card-title { font-size: 12px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 16px; }
+  .card-title { font-size: 12px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 
   .progress-item { margin-bottom: 10px; }
   .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 10px; flex-wrap: wrap; }
@@ -72,8 +72,7 @@
   .cat-header:first-child { margin-top: 0; }
   .cat-header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
   .cat-name { font-size: 12px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: .05em; }
-  .cat-totals { font-size: 12px; font-weight: 600; }
-  .cat-stats { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text3); gap: 12px; }
+  .cat-stats { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text3); gap: 12px; flex-wrap: wrap; }
   .cat-stat { display: flex; gap: 4px; }
   .cat-stat .val { font-weight: 600; }
   .cat-stat.pres .val { color: var(--text2); }
@@ -82,6 +81,7 @@
   .cat-stat.disp.neg .val { color: var(--red); }
   .cat-pct { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
 
+  .tx-list { max-height: 500px; overflow-y: auto; }
   .tx-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .tx-row:last-child { border-bottom: none; }
   .tx-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
@@ -89,6 +89,12 @@
   .tx-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tx-meta { font-size: 11px; color: var(--text3); margin-top: 2px; }
   .tx-amount { font-size: 13px; font-weight: 600; color: var(--red); flex-shrink: 0; }
+  .tx-count { font-size: 11px; color: var(--text3); font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .tx-search { background: var(--bg3); border: 1px solid var(--border); color: var(--text); font-size: 12px; padding: 6px 10px; border-radius: 6px; width: 150px; outline: none; }
+  .tx-search:focus { border-color: var(--blue); }
+  .tx-filter { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); font-size: 11px; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
+  .tx-filter.active { background: var(--blue); color: white; border-color: var(--blue); }
+  .tx-filters { display: flex; gap: 6px; flex-wrap: wrap; }
 
   .flujo-table { width: 100%; border-collapse: collapse; font-size: 12px; overflow-x: auto; display: block; }
   .flujo-table th { text-align: right; font-size: 11px; font-weight: 500; color: var(--text3); padding: 6px 10px; border-bottom: 1px solid var(--border); }
@@ -106,7 +112,30 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .alert-banner { background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.3); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: var(--red); }
-  .chart-wrap { position: relative; height: 220px; }
+  .chart-wrap { position: relative; height: 320px; }
+
+  /* Selector de categoría para el histograma */
+  .cat-selector { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .cat-pill { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); font-size: 11px; padding: 5px 10px; border-radius: 20px; cursor: pointer; transition: all .2s; }
+  .cat-pill:hover { color: var(--text); }
+  .cat-pill.active { background: var(--blue); color: white; border-color: var(--blue); }
+
+  .evo-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .evo-stat { background: var(--bg3); padding: 10px 12px; border-radius: 8px; }
+  .evo-stat-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+  .evo-stat-value { font-size: 15px; font-weight: 600; }
+  .evo-stat-sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+  /* Tarjetas de recomendaciones */
+  .rec-card { background: linear-gradient(135deg, rgba(79,124,247,.1), rgba(167,139,250,.1)); border: 1px solid rgba(79,124,247,.3); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; display: flex; gap: 12px; align-items: flex-start; }
+  .rec-card.warn { background: linear-gradient(135deg, rgba(251,191,36,.1), rgba(248,113,113,.1)); border-color: rgba(251,191,36,.3); }
+  .rec-card.danger { background: linear-gradient(135deg, rgba(248,113,113,.1), rgba(220,38,38,.1)); border-color: rgba(248,113,113,.3); }
+  .rec-icon { font-size: 20px; flex-shrink: 0; line-height: 1; }
+  .rec-body { flex: 1; }
+  .rec-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; color: var(--text); }
+  .rec-desc { font-size: 12px; color: var(--text2); line-height: 1.4; }
+  .rec-desc b { color: var(--text); }
+  .rec-empty { color: var(--text3); font-size: 13px; text-align: center; padding: 20px; }
 </style>
 </head>
 <body>
@@ -133,16 +162,57 @@ const API = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:
 let currentTab = 'simon';
 let allData = {};
 let charts = {};
+let txFilter = 'all';
+let txSearch = '';
+let catSeleccionada = null;
 
 const CAT_ICONS = {
   'Hogar':'🏠','Comida':'🍔','Transporte':'🚗','Deudas':'💳',
   'Entretenimiento':'🎉','Tranquilidad Financiera':'💰','Salud':'💊','Por Definir':'❓'
 };
 
+const CAT_COLORS = {
+  'Hogar': '#4f7cf7',
+  'Comida': '#f59e0b',
+  'Transporte': '#fbbf24',
+  'Deudas': '#f87171',
+  'Entretenimiento': '#a78bfa',
+  'Tranquilidad Financiera': '#34d399',
+  'Salud': '#06b6d4',
+  'Por Definir': '#6b7280'
+};
+
 function fmt(n) { return '$' + Math.round(n||0).toLocaleString('es-CO'); }
 function fmtS(n) { const a=Math.abs(n||0); return (n<0?'-':'')+'$'+(a>=1000000?(a/1000000).toFixed(1)+'M':a>=1000?Math.round(a/1000)+'k':Math.round(a)); }
 function pct(g,p) { return p>0?Math.round(g/p*100):0; }
 function barColor(p) { return p>100?'var(--red)':p>=100?'var(--green)':p>=90?'var(--yellow)':'var(--blue)'; }
+
+function parseFecha(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  if (typeof v === 'string') {
+    const dateMatch = v.match(/Date\((\d+),(\d+),(\d+)(?:,(\d+),(\d+))?/);
+    if (dateMatch) {
+      return new Date(+dateMatch[1], +dateMatch[2], +dateMatch[3], +(dateMatch[4]||0), +(dateMatch[5]||0));
+    }
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return null;
+}
+
+function fmtFecha(v) {
+  const d = parseFecha(v);
+  if (!d) return String(v||'').substring(0,16);
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' +
+         d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+}
+
+function mesDeFecha(v) {
+  const d = parseFecha(v);
+  if (!d) return '';
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+}
 
 async function fetchSheet(name) {
   const url = API + encodeURIComponent(name);
@@ -179,8 +249,340 @@ async function loadAll() {
 
 function setTab(tab) {
   currentTab = tab;
+  txFilter = 'all';
+  txSearch = '';
+  catSeleccionada = null;
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', ['simon','alejandra','hogar'][i]===tab));
   renderTab(tab);
+}
+
+// Datos agregados por categoría y mes a partir de Transacciones
+function evolucionPorCategoria(tab) {
+  const txs = (allData.tx || []).filter(r => {
+    if (tab === 'hogar') return (r['Bucket']||'').toLowerCase() === 'ambos';
+    return (r['Persona']||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'') === tab;
+  });
+
+  const porCatMes = {}; // { 'Categoria': { 'yyyy-MM': total, ... } }
+  const mesesSet = new Set();
+
+  txs.forEach(r => {
+    let mes = r['Mes'] ? String(r['Mes']).substring(0,7) : mesDeFecha(r['Fecha']);
+    if (!mes || mes.length < 7) return;
+    const cat = r['Categoría'] || 'Sin categoría';
+    if (cat === 'Por Definir') return;
+    const monto = parseFloat(r['Monto']) || 0;
+    if (!porCatMes[cat]) porCatMes[cat] = {};
+    porCatMes[cat][mes] = (porCatMes[cat][mes] || 0) + monto;
+    mesesSet.add(mes);
+  });
+
+  const meses = [...mesesSet].sort();
+  return { meses, porCatMes };
+}
+
+function presupuestoPorCategoria(tab) {
+  const progreso = allData[tab]?.progreso || [];
+  const porCat = {};
+  progreso.forEach(r => {
+    const cat = r['Categoria'];
+    if (!cat) return;
+    porCat[cat] = (porCat[cat] || 0) + (r['Presupuesto'] || 0);
+  });
+  return porCat;
+}
+
+// Recomendaciones automáticas basadas en comportamiento histórico
+function generarRecomendaciones(tab) {
+  const evo = evolucionPorCategoria(tab);
+  const pres = presupuestoPorCategoria(tab);
+  const mesActual = new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0');
+  const mesesHistoricos = evo.meses.filter(m => m !== mesActual);
+
+  const recs = [];
+
+  Object.keys(evo.porCatMes).forEach(cat => {
+    const presCat = pres[cat] || 0;
+    if (presCat === 0) return;
+
+    const historicos = mesesHistoricos.map(m => evo.porCatMes[cat][m] || 0);
+    if (historicos.length < 3) return; // necesitamos al menos 3 meses
+
+    const promedio = historicos.reduce((s,v)=>s+v,0) / historicos.length;
+    const excesos = historicos.filter(v => v > presCat).length;
+    const porcentajeExceso = Math.round((promedio - presCat) / presCat * 100);
+
+    // Recomendación: subir presupuesto si excede consistentemente
+    if (excesos >= Math.ceil(mesesHistoricos.length * 0.6) && promedio > presCat * 1.1) {
+      const nuevoSugerido = Math.ceil(promedio / 10000) * 10000;
+      recs.push({
+        tipo: 'danger',
+        icon: '📈',
+        titulo: `Considera subir presupuesto de ${cat}`,
+        desc: `Has excedido <b>${cat}</b> en <b>${excesos} de ${mesesHistoricos.length} meses</b>. Promedio: <b>${fmt(promedio)}</b> vs presupuesto <b>${fmt(presCat)}</b> (+${porcentajeExceso}%). Sugerencia: subirlo a <b>${fmt(nuevoSugerido)}</b>.`
+      });
+    }
+    // Recomendación: bajar presupuesto si consistentemente queda muy por debajo
+    else if (promedio < presCat * 0.5 && historicos.filter(v => v < presCat * 0.6).length >= Math.ceil(mesesHistoricos.length * 0.7)) {
+      const nuevoSugerido = Math.ceil(promedio * 1.2 / 10000) * 10000;
+      recs.push({
+        tipo: 'default',
+        icon: '📉',
+        titulo: `Puedes reducir presupuesto de ${cat}`,
+        desc: `Solo usas en promedio <b>${fmt(promedio)}</b> de los <b>${fmt(presCat)}</b> asignados (${pct(promedio,presCat)}%). Podrías reducirlo a <b>${fmt(nuevoSugerido)}</b> y reasignar la diferencia.`
+      });
+    }
+    // Mes actual muy acelerado vs promedio
+    const gastoMesActual = evo.porCatMes[cat][mesActual] || 0;
+    const diaHoy = new Date().getDate();
+    const diasMes = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate();
+    const proyeccion = gastoMesActual / diaHoy * diasMes;
+    if (proyeccion > promedio * 1.3 && gastoMesActual > 0 && historicos.length >= 2) {
+      const incPct = Math.round((proyeccion - promedio) / promedio * 100);
+      recs.push({
+        tipo: 'warn',
+        icon: '⚠️',
+        titulo: `${cat} va acelerado este mes`,
+        desc: `Proyección al cierre: <b>${fmt(proyeccion)}</b>, un <b>+${incPct}%</b> sobre tu promedio histórico de ${fmt(promedio)}. Revisa gastos recientes.`
+      });
+    }
+  });
+
+  return recs;
+}
+
+function filtrarTransacciones(tab) {
+  const mesActual = new Date().getFullYear() + '-' + String(new Date().getMonth()+1).padStart(2,'0');
+  let txs = (allData.tx || []).filter(r => {
+    if (tab === 'hogar') return (r['Bucket']||'').toLowerCase() === 'ambos';
+    return (r['Persona']||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'') === tab;
+  });
+
+  if (txFilter === 'mes-actual') {
+    txs = txs.filter(r => {
+      const mes = r['Mes'] ? String(r['Mes']).substring(0,7) : mesDeFecha(r['Fecha']);
+      return mes === mesActual;
+    });
+  }
+
+  if (txSearch) {
+    const q = txSearch.toLowerCase();
+    txs = txs.filter(r => {
+      const comercio = String(r['Comercio']||'').toLowerCase();
+      const subcat = String(r['Subcategoría']||'').toLowerCase();
+      const cat = String(r['Categoría']||'').toLowerCase();
+      return comercio.includes(q) || subcat.includes(q) || cat.includes(q);
+    });
+  }
+
+  txs.sort((a,b) => {
+    const da = parseFecha(a['Fecha']);
+    const db = parseFecha(b['Fecha']);
+    if (!da || !db) return 0;
+    return db - da;
+  });
+
+  return txs;
+}
+
+function updateSearch(val) {
+  txSearch = val;
+  renderTxList();
+}
+
+function toggleFilter(f) {
+  txFilter = f;
+  renderTxList();
+}
+
+function seleccionarCategoria(cat) {
+  catSeleccionada = cat;
+  renderEvolucion();
+}
+
+function renderTxList() {
+  const txs = filtrarTransacciones(currentTab);
+  const el = document.getElementById('tx-list-container');
+  if (!el) return;
+  el.innerHTML = renderTxs(txs);
+  document.getElementById('tx-count').textContent = txs.length + ' transacciones';
+  document.querySelectorAll('.tx-filter').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === txFilter);
+  });
+}
+
+function renderTxs(txs) {
+  if (!txs.length) return `<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px">Sin transacciones</div>`;
+  return txs.map(r => {
+    const cat = r['Categoría']||'';
+    const icon = CAT_ICONS[cat]||'💳';
+    const bg = cat==='Entretenimiento'?'rgba(167,139,250,.15)':cat==='Hogar'?'rgba(79,124,247,.15)':cat==='Transporte'?'rgba(251,191,36,.15)':'rgba(52,211,153,.15)';
+    const estado = r['Estado'] || '';
+    const estadoBadge = estado === 'REVISAR' ? `<span class="badge badge-warn" style="margin-left:6px">REVISAR</span>` : '';
+    return `<div class="tx-row">
+      <div class="tx-icon" style="background:${bg}">${icon}</div>
+      <div class="tx-info">
+        <div class="tx-name">${r['Comercio']||'—'}${estadoBadge}</div>
+        <div class="tx-meta">${fmtFecha(r['Fecha'])} · ${r['Subcategoría']||'—'}</div>
+      </div>
+      <div class="tx-amount">${fmt(r['Monto']||0)}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderEvolucion() {
+  const evo = evolucionPorCategoria(currentTab);
+  const pres = presupuestoPorCategoria(currentTab);
+  const cats = Object.keys(evo.porCatMes);
+
+  if (!catSeleccionada || !cats.includes(catSeleccionada)) {
+    catSeleccionada = cats[0] || null;
+  }
+
+  const el = document.getElementById('evo-container');
+  if (!el) return;
+
+  // Pills de selección de categoría
+  const pills = cats.map(c => `
+    <span class="cat-pill ${c===catSeleccionada?'active':''}" onclick="seleccionarCategoria('${c.replace(/'/g,"\\'")}')">${CAT_ICONS[c]||'•'} ${c}</span>
+  `).join('');
+
+  if (!catSeleccionada) {
+    el.innerHTML = `<div class="cat-selector">${pills}</div><div class="rec-empty">Sin datos históricos</div>`;
+    return;
+  }
+
+  const datosCat = evo.meses.map(m => evo.porCatMes[catSeleccionada][m] || 0);
+  const presCat = pres[catSeleccionada] || 0;
+  const promedio = datosCat.length ? datosCat.reduce((s,v)=>s+v,0) / datosCat.length : 0;
+  const mesActualIdx = evo.meses.length - 1;
+  const gastoMesActual = datosCat[mesActualIdx] || 0;
+  const gastoMesAnterior = datosCat[mesActualIdx - 1] || 0;
+  const incPct = gastoMesAnterior > 0 ? Math.round((gastoMesActual - gastoMesAnterior) / gastoMesAnterior * 100) : 0;
+  const diffPromedio = promedio > 0 ? Math.round((gastoMesActual - promedio) / promedio * 100) : 0;
+
+  el.innerHTML = `
+    <div class="cat-selector">${pills}</div>
+    <div class="evo-summary">
+      <div class="evo-stat">
+        <div class="evo-stat-label">Promedio histórico</div>
+        <div class="evo-stat-value">${fmt(promedio)}</div>
+        <div class="evo-stat-sub">${datosCat.length} meses</div>
+      </div>
+      <div class="evo-stat">
+        <div class="evo-stat-label">Mes actual</div>
+        <div class="evo-stat-value ${gastoMesActual > promedio ? 'red' : 'green'}">${fmt(gastoMesActual)}</div>
+        <div class="evo-stat-sub ${diffPromedio > 0 ? 'red' : 'green'}">${diffPromedio>=0?'+':''}${diffPromedio}% vs promedio</div>
+      </div>
+      <div class="evo-stat">
+        <div class="evo-stat-label">vs mes anterior</div>
+        <div class="evo-stat-value ${incPct > 0 ? 'red' : 'green'}">${incPct>=0?'+':''}${incPct}%</div>
+        <div class="evo-stat-sub">${fmt(gastoMesAnterior)} → ${fmt(gastoMesActual)}</div>
+      </div>
+      <div class="evo-stat">
+        <div class="evo-stat-label">Presupuesto</div>
+        <div class="evo-stat-value blue">${fmt(presCat)}</div>
+        <div class="evo-stat-sub">${promedio > presCat ? '⚠️ Promedio supera presupuesto' : '✅ Promedio bajo presupuesto'}</div>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="evo-chart"></canvas></div>
+  `;
+
+  // Render chart con histograma + línea de promedio + línea de presupuesto
+  requestAnimationFrame(() => {
+    const ctx = document.getElementById('evo-chart');
+    if (!ctx) return;
+    if (charts.evo) charts.evo.destroy();
+
+    const colorPrincipal = CAT_COLORS[catSeleccionada] || '#4f7cf7';
+    const barColors = datosCat.map((_, i) => i === mesActualIdx ? colorPrincipal : colorPrincipal + '99');
+
+    // Etiquetas con % de cambio en la barra actual
+    const dataLabels = datosCat.map((v, i) => {
+      if (i === mesActualIdx && gastoMesAnterior > 0) {
+        return `${fmtS(v)} (${incPct>=0?'+':''}${incPct}%)`;
+      }
+      return fmtS(v);
+    });
+
+    charts.evo = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: evo.meses,
+        datasets: [{
+          label: catSeleccionada,
+          data: datosCat,
+          backgroundColor: barColors,
+          borderRadius: 4,
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => `${fmt(ctx.raw)}`,
+              afterLabel: ctx => {
+                const idx = ctx.dataIndex;
+                if (idx === 0) return '';
+                const prev = datosCat[idx-1];
+                if (prev === 0) return '';
+                const inc = Math.round((ctx.raw - prev) / prev * 100);
+                return `vs mes anterior: ${inc>=0?'+':''}${inc}%`;
+              }
+            }
+          },
+          annotation: {
+            annotations: {
+              promedio: {
+                type: 'line',
+                yMin: promedio,
+                yMax: promedio,
+                borderColor: '#fbbf24',
+                borderWidth: 2,
+                borderDash: [6, 4],
+                label: {
+                  display: true,
+                  content: `Promedio: ${fmtS(promedio)}`,
+                  position: 'end',
+                  backgroundColor: 'rgba(251,191,36,.9)',
+                  color: '#1a1d27',
+                  font: { size: 10, weight: 'bold' },
+                  padding: 4,
+                  borderRadius: 4
+                }
+              },
+              presupuesto: presCat > 0 ? {
+                type: 'line',
+                yMin: presCat,
+                yMax: presCat,
+                borderColor: '#4f7cf7',
+                borderWidth: 2,
+                borderDash: [2, 2],
+                label: {
+                  display: true,
+                  content: `Presup: ${fmtS(presCat)}`,
+                  position: 'start',
+                  backgroundColor: 'rgba(79,124,247,.9)',
+                  color: 'white',
+                  font: { size: 10, weight: 'bold' },
+                  padding: 4,
+                  borderRadius: 4
+                }
+              } : undefined
+            }
+          }
+        },
+        scales: {
+          y: { ticks: { callback: v=>fmtS(v), color: '#6b7280', font:{size:10} }, grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true },
+          x: { ticks: { color: '#9ca3af', font:{size:10} }, grid: { display: false } }
+        }
+      }
+    });
+  });
 }
 
 function renderTab(tab) {
@@ -188,10 +590,6 @@ function renderTab(tab) {
   if (!d) return;
   const progreso = d.progreso || [];
   const flujo    = d.flujo || [];
-  const tx       = (allData.tx || []).filter(r => {
-    if (tab === 'hogar') return (r['Bucket']||'').toLowerCase() === 'ambos';
-    return (r['Persona']||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'') === tab;
-  }).slice(0,10);
 
   const totalPres = progreso.reduce((s,r)=>s+(r['Presupuesto']||0),0);
   const totalGast = progreso.reduce((s,r)=>s+(r['Gastado']||0),0);
@@ -202,7 +600,6 @@ function renderTab(tab) {
 
   let html = '';
 
-  // Alertas
   if (alertas.length) {
     const exc = alertas.filter(r=>r['Estado']==='EXCEDIDO');
     const warn = alertas.filter(r=>r['Estado']==='ALERTA');
@@ -210,7 +607,6 @@ function renderTab(tab) {
     if (warn.length) html += `<div class="alert-banner" style="background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.3);color:var(--yellow)">🟡 <b>En alerta (≥90%):</b> ${warn.map(r=>r['Subcategoria']).join(', ')}</div>`;
   }
 
-  // Métricas
   html += `<div class="metrics">`;
   if (ingreso) html += `<div class="metric"><div class="metric-label">Ingreso</div><div class="metric-value green">${fmt(ingreso)}</div></div>`;
   html += `<div class="metric"><div class="metric-label">Presupuesto</div><div class="metric-value">${fmt(totalPres)}</div></div>`;
@@ -219,10 +615,9 @@ function renderTab(tab) {
   if (ingreso) html += `<div class="metric"><div class="metric-label">Libre (ingreso-gastado)</div><div class="metric-value ${ingreso-totalGast<0?'red':'green'}">${fmt(ingreso-totalGast)}</div></div>`;
   html += `</div>`;
 
-  // Grid: progreso + gráfica
+  // Grid: progreso + presupuesto vs gastado
   html += `<div class="grid2">`;
 
-  // Tabla progreso por categoría
   html += `<div class="card"><div class="card-title">Progreso del mes</div>`;
   const cats = [...new Set(progreso.map(r=>r['Categoria']))];
   cats.forEach(cat => {
@@ -233,7 +628,6 @@ function renderTab(tab) {
     const p2    = pct(catG,catP);
     const pctBadgeClass = p2>100?'badge-danger':p2>=100?'badge-complete':p2>=90?'badge-warn':'badge-ok';
 
-    // Header de categoría enriquecido
     html += `<div class="cat-header">
       <div class="cat-header-top">
         <span class="cat-name">${CAT_ICONS[cat]||'•'} ${cat}</span>
@@ -270,7 +664,6 @@ function renderTab(tab) {
   });
   html += `</div>`;
 
-  // Gráfica de barras
   html += `<div class="card"><div class="card-title">Presupuesto vs. gastado</div><div class="chart-wrap"><canvas id="bar-chart"></canvas></div></div>`;
   html += `</div>`;
 
@@ -286,34 +679,53 @@ function renderTab(tab) {
   }
   html += `</table></div></div>`;
 
-  // Gráfica de líneas flujo + transacciones recientes
-  html += `<div class="grid2">`;
-  html += `<div class="card"><div class="card-title">Tendencia de gastos</div><div class="chart-wrap"><canvas id="line-chart"></canvas></div></div>`;
+  // Evolución por categoría + Recomendaciones
+  html += `<div class="card" style="margin-bottom:16px"><div class="card-title">Evolución mensual por categoría</div><div id="evo-container"></div></div>`;
 
-  // Transacciones recientes
-  html += `<div class="card"><div class="card-title">Transacciones recientes</div>`;
-  if (tx.length) {
-    tx.forEach(r => {
-      const cat = r['Categoría']||'';
-      const icon = CAT_ICONS[cat]||'💳';
-      const bg = cat==='Entretenimiento'?'rgba(167,139,250,.15)':cat==='Hogar'?'rgba(79,124,247,.15)':cat==='Transporte'?'rgba(251,191,36,.15)':'rgba(52,211,153,.15)';
-      html += `<div class="tx-row">
-        <div class="tx-icon" style="background:${bg}">${icon}</div>
-        <div class="tx-info">
-          <div class="tx-name">${r['Comercio']||'—'}</div>
-          <div class="tx-meta">${(r['Fecha']||'').toString().substring(0,10)} · ${r['Subcategoría']||''}</div>
-        </div>
-        <div class="tx-amount">${fmt(r['Monto']||0)}</div>
-      </div>`;
-    });
-  } else {
-    html += `<div style="color:var(--text3);font-size:13px;text-align:center;padding:20px">Sin transacciones</div>`;
-  }
-  html += `</div></div>`;
+  // Grid inferior: recomendaciones + transacciones
+  html += `<div class="grid2">`;
+
+  html += `<div class="card"><div class="card-title">💡 Recomendaciones de ajuste</div><div id="rec-container"></div></div>`;
+
+  html += `<div class="card">
+    <div class="card-title">
+      <span>Transacciones <span class="tx-count" id="tx-count">—</span></span>
+      <input type="text" class="tx-search" placeholder="Buscar..." oninput="updateSearch(this.value)" value="${txSearch}">
+    </div>
+    <div class="tx-filters" style="margin-bottom:12px">
+      <button class="tx-filter ${txFilter==='all'?'active':''}" data-filter="all" onclick="toggleFilter('all')">Todas</button>
+      <button class="tx-filter ${txFilter==='mes-actual'?'active':''}" data-filter="mes-actual" onclick="toggleFilter('mes-actual')">Solo este mes</button>
+    </div>
+    <div class="tx-list" id="tx-list-container"></div>
+  </div>`;
+
+  html += `</div>`;
 
   document.getElementById('content').innerHTML = html;
 
-  // Render charts
+  renderEvolucion();
+  renderTxList();
+
+  // Recomendaciones
+  const recs = generarRecomendaciones(tab);
+  const recContainer = document.getElementById('rec-container');
+  if (recContainer) {
+    if (!recs.length) {
+      recContainer.innerHTML = `<div class="rec-empty">✨ Todo en orden. No hay recomendaciones por ahora.</div>`;
+    } else {
+      recContainer.innerHTML = recs.map(r => `
+        <div class="rec-card ${r.tipo}">
+          <div class="rec-icon">${r.icon}</div>
+          <div class="rec-body">
+            <div class="rec-title">${r.titulo}</div>
+            <div class="rec-desc">${r.desc}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+
+  // Bar chart presupuesto vs gastado
   requestAnimationFrame(() => {
     const barCtx = document.getElementById('bar-chart');
     if (barCtx) {
@@ -328,21 +740,6 @@ function renderTab(tab) {
           ]
         },
         options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { callback: v=>fmtS(v), color: '#6b7280', font:{size:10} }, grid: { color: 'rgba(255,255,255,.05)' } }, y: { ticks: { color: '#9ca3af', font:{size:11} }, grid: { display: false } } } }
-      });
-    }
-
-    const lineCtx = document.getElementById('line-chart');
-    if (lineCtx) {
-      if (charts.line) charts.line.destroy();
-      const datasets = [{ label: 'Gastos', data: flujo.map(r=>r['Gastos']||0), borderColor: '#f87171', backgroundColor: 'rgba(248,113,113,.1)', fill: true, tension: .3, pointRadius: 3, borderWidth: 2 }];
-      if (ingreso) {
-        datasets.push({ label: 'Ingreso', data: flujo.map(r=>r['Ingreso']||0), borderColor: '#34d399', backgroundColor: 'transparent', borderDash: [6,3], tension: 0, pointRadius: 0, borderWidth: 1.5 });
-        datasets.push({ label: 'Resultado', data: flujo.map(r=>r['Resultado']||0), borderColor: '#4f7cf7', backgroundColor: 'rgba(79,124,247,.1)', fill: true, tension: .3, pointRadius: 3, borderWidth: 1.5 });
-      }
-      charts.line = new Chart(lineCtx, {
-        type: 'line',
-        data: { labels: meses, datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#9ca3af', font:{size:11}, boxWidth:12 } } }, scales: { y: { ticks: { callback: v=>fmtS(v), color: '#6b7280', font:{size:10} }, grid: { color: 'rgba(255,255,255,.05)' } }, x: { ticks: { color: '#9ca3af', font:{size:10} }, grid: { display: false } } } }
       });
     }
   });
